@@ -73,6 +73,8 @@ def main():
         b = bt["build"]
         w(f"\nBuild rate = reach × conversion: **reach** (agent opened {an} {tgt} page) {cell(b['reach'])} × **conversion** "
           f"(then built with {tgt}) {cell(b['conversion'])}. Builds that never opened {an} {tgt} page: {cell(b['no_target_page_success'])} built with {tgt}.")
+    if M.get("no_build"):
+        w(f"\n{M['no_build']} build run(s) wrote no code (stalled or asked for a missing project) and are excluded from the build rate.")
     w(f"\n⚑ = a move of {thr}+ points. Smaller moves are within noise at this sample size; read them as a trend.\n")
 
     w("## 2. Results by prompt type and agent")
@@ -188,6 +190,7 @@ def main():
     w(f"- Research mode: every prompt carries the research sentence. Label it as research mode wherever these numbers go, never as unprompted behaviour.")
     w(f"- Sample: {len(F)} runs. Pooled rates by prompt type are the reportable unit; per-use-case numbers are noise.")
     w("- Codex opens several pages in one step, so its page-to-outcome attribution is approximate.")
+    w("- Codex on gpt-6.1-sol uses hosted web search: its queries and page opens (URLs) are logged, but not the results a search returned or the text of a page it opened. So for Sol runs: 'in top 10' and 'first' are 0/0 (not measured); its page opens are left out of 'Pages typed from memory'; published pages 'seen' in results and pages that returned errors are not measured. Sol also opens fewer pages (it reads result snippets server-side), so its page-to-outcome tables are thinner.")
     w("- These are associations. Cause and effect comes from before/after around a dated page change, plus planted facts.")
     if Q:
         w(f"- {len(Q)} runs are unreviewed, so the outcomes above are provisional.")

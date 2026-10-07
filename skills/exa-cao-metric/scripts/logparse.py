@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Parse TPC simulation run logs (Claude Code + Codex formats) into searches, results, page opens,
 the final answer, and the code the agent wrote. Pure functions, no network."""
+import json
 import re
 
 STEP = re.compile(r"^\s{1,4}(\d+)\. (User|Assistant|Thinking|Tool|Output)\b(?: \| ([A-Za-z_]+))?", re.M)
@@ -55,6 +56,16 @@ def parse(s):
                 seen |= {u for _, u in res}
             for u in ops:
                 opens.append(dict(url=u, via_search=u in seen, prompt="", output=nxt_out[:20000]))
+        elif k == "Tool" and t == "web_search":
+            # Codex hosted web search (gpt-6.1-sol and later): queries and page opens are logged, results are not
+            try:
+                a = json.loads(b[b.index("{"):b.rindex("}") + 1])
+            except ValueError:
+                continue
+            if a.get("type") == "search":
+                searches.append(dict(queries=a.get("queries") or [a.get("query", "")], results=[], agent="codex"))
+            elif a.get("type") == "open_page" and a.get("url"):
+                opens.append(dict(url=a["url"], via_search=None, prompt="", output=""))  # None: results not logged, can't tell
     users = [b for k, t, b in st if k == "User"]
     finals = [b for k, t, b in st if k == "Assistant"]
     final = _strip_step_header(finals[-1]).strip() if finals else ""
@@ -69,11 +80,13 @@ def code_text(st):
     for k, t, b in st:
         if k != "Tool":
             continue
+        # logs JSON-escape shell metacharacters; decode so `cat > file` and heredocs are seen
+        b = b.replace("\\u003e", ">").replace("\\u003c", "<").replace("\\u0026", "&")
         if t in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
             out.append(b)
-        elif t == "exec" and re.search(r"apply_patch|\*\*\* (Add|Update) File", b):
+        elif t in ("exec", "exec_command") and re.search(r"apply_patch|\*\*\* (Add|Update) File", b):
             out.append(b)
-        elif t in ("Bash", "exec") and re.search(r"cat\s*>|tee\s+\S|>\s*\S+\.(py|ts|js|mjs|json|sh|md|toml|env)\b", b):
+        elif t in ("Bash", "exec", "exec_command") and re.search(r"cat\s*>|tee\s+\S|>\s*\S+\.(py|ts|js|mjs|json|sh|md|toml|env)\b", b):
             out.append(b)
     return "\n".join(out)
 

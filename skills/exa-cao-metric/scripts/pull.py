@@ -33,6 +33,9 @@ def main():
     g.add_argument("--iteration", type=int, help="same iteration number for every experiment")
     g.add_argument("--latest", action="store_true", help="latest COMPLETED iteration per experiment (default)")
     ap.add_argument("--label", help="folder name for this pull (default: ISO week, e.g. 2026-W41)")
+    ap.add_argument("--runs", help="comma-separated standalone run ids (smoke tests); prompt type from --prompt-type")
+    ap.add_argument("--prompt-type", default="build")
+    ap.add_argument("--mode", default="research")
     a = ap.parse_args()
     cfg = yaml.safe_load(open(a.config))
     scope = cfg["scope"]
@@ -42,7 +45,15 @@ def main():
     os.makedirs(base, exist_ok=True); os.makedirs(cache, exist_ok=True)
 
     runs = []
-    for ex in cfg["experiments"]:
+    if a.runs:
+        for rid in a.runs.split(","):
+            g = tpc(["sim", "run", "get", rid.strip()], scope); g = g.get("run", g)
+            env, ac = g.get("environment") or {}, (g.get("environment") or {}).get("agentConfig") or g.get("agentConfig") or {}
+            runs.append(dict(id=g["id"], experiment=None, prompt_type=a.prompt_type, mode=a.mode, iteration=None,
+                             task_id=g.get("taskId"), task=g.get("taskName") or (g.get("task") or {}).get("name", ""),
+                             env_id=g.get("environmentId"), env=g.get("environmentName") or env.get("name", ""),
+                             harness=ac.get("harness", ""), model=ac.get("model", ""), status=g.get("status"), signals={}))
+    for ex in ([] if a.runs else cfg["experiments"]):
         info = tpc(["sim", "experiment", "get", ex["id"]], scope)
         info = info.get("experiment", info)
         its = sorted(info.get("iterations") or [], key=lambda x: x["iterationNumber"])

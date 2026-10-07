@@ -106,6 +106,8 @@ def classify(cfg, pt, P, goals, wired):
     """Return (outcome, reason, needs_review)."""
     final = P["final"]
     if pt == "build":
+        if len(P["code"].strip()) < 200:   # agent wrote no files: stalled, asked for code, or only answered
+            return "no_build", "no code written", False
         others = [v for v in wired if v != "target"]
         if "target" in wired and not others: return "main", "only target wired", False
         if "target" in wired: return "shared", "target wired with " + ",".join(others), True
@@ -206,8 +208,9 @@ def rate(rows, key="success"):
 
 def metrics(cfg, F):
     M = dict(by_type={}, pages={}, citations={}, published={}, planted={}, negative={}, behavior={}, won_instead={}, errors={})
+    M["no_build"] = sum(1 for f in F if f["prompt_type"] == "build" and f["outcome"] == "no_build")
     for pt in ["build", "tool-seeking", "head-to-head", "usability"]:
-        rows = [f for f in F if f["prompt_type"] == pt]
+        rows = [f for f in F if f["prompt_type"] == pt and f["outcome"] != "no_build"]
         if not rows: continue
         d = dict(pooled=rate(rows), outcomes=dict(Counter(f["outcome"] for f in rows)), by_agent={})
         for a in sorted({f["agent"] for f in rows}):
@@ -236,8 +239,8 @@ def metrics(cfg, F):
             M["behavior"][f"{pt} | {a}"] = dict(runs=len(ar), searched=sum(f["searched"] for f in ar), queries=dict(qk),
                                                neutral=sum(f["neutral_searches"] for f in ar), neutral_visible=sum(f["neutral_visible"] for f in ar),
                                                own_name=sum(f["own_name_searches"] for f in ar), own_name_first=sum(f["own_name_first"] for f in ar),
-                                               typed_from_memory=sum(1 for f in ar for o in f["opens"] if not o["via_search"]),
-                                               opens=sum(len(f["opens"]) for f in ar), fetch_asks=dict(asks))
+                                               typed_from_memory=sum(1 for f in ar for o in f["opens"] if o["via_search"] is False),
+                                               opens=sum(1 for f in ar for o in f["opens"] if o["via_search"] is not None), fetch_asks=dict(asks))
         # what won instead (builds) / rival first
         if pt == "build":
             M["won_instead"]["build"] = dict(Counter(",".join(v for v in f["wired"] if v != "target") or "none/DIY" for f in rows if not f["success"]))
